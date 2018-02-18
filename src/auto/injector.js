@@ -377,7 +377,6 @@ function annotate(fn, strictDi, name) {
  *     See: {@link angular.module modules}
  */
 
-
 /**
  * @ngdoc service
  * @name $provide
