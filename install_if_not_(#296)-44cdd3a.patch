@@ -1,0 +1,276 @@
+From 44cdd3aea8b34b4b6c173a8227eb5f485f9c4cbf Mon Sep 17 00:00:00 2001
+From: Daniel Hansson <daniel@techandme.se>
+Date: Tue, 11 Jul 2017 16:59:33 +0200
+Subject: [PATCH] install_if_not (#296)
+
+Signed-off-by: Daniel Hansson <daniel@techandme.se>
+
+	modified:   apps/collabora.sh
+	modified:   apps/onlyoffice.sh
+	modified:   apps/spreedme.sh
+	modified:   lets-encrypt/activate-ssl.sh
+	modified:   lib.sh
+	modified:   nextcloud_update.sh
+test
+---
+ apps/collabora.sh            | 13 +------------
+ apps/onlyoffice.sh           | 15 ++-------------
+ apps/spreedme.sh             |  6 +-----
+ lets-encrypt/activate-ssl.sh | 19 +++++++------------
+ lib.sh                       | 20 ++++++++++++++++++--
+ nextcloud_update.sh          | 37 ++++++++++++++++---------------------
+ 6 files changed, 45 insertions(+), 65 deletions(-)
+
+diff --git a/apps/collabora.sh b/apps/collabora.sh
+index 5adc96c..7ae21d0 100644
+--- a/apps/collabora.sh
++++ b/apps/collabora.sh
+@@ -184,18 +184,7 @@ docker pull collabora/code
+ docker run -t -d -p 127.0.0.1:9980:9980 -e "domain=$NCDOMAIN" --restart always --cap-add MKNOD collabora/code
+ 
+ # Install Apache2
+-if [ "$(dpkg-query -W -f='${Status}' apache2 2>/dev/null | grep -c "ok installed")" == "1" ]
+-then
+-    sleep 0.1
+-else
+-    {
+-    i=1
+-    while read -r line; do
+-        ((i++))
+-        echo $i
+-    done < <(apt install apache2 -y)
+-    } | whiptail --title "Progress" --gauge "Please wait while installing Apache2" 6 60 0
+-fi
++install_if_not apache2
+ 
+ # Enable Apache2 module's
+ a2enmod proxy
+diff --git a/apps/onlyoffice.sh b/apps/onlyoffice.sh
+index 25c2a65..3e58f0e 100644
+--- a/apps/onlyoffice.sh
++++ b/apps/onlyoffice.sh
+@@ -183,19 +183,8 @@ fi
+ docker pull onlyoffice/documentserver
+ docker run -i -t -d -p 127.0.0.3:9090:80 -p 127.0.0.3:9091:443 --restart always onlyoffice/documentserver
+ 
+-# Install Apache2
+-if [ "$(dpkg-query -W -f='${Status}' apache2 2>/dev/null | grep -c "ok installed")" == "1" ]
+-then
+-    sleep 0.1
+-else
+-    {
+-    i=1
+-    while read -r line; do
+-        ((i++))
+-        echo $i
+-    done < <(apt install apache2 -y)
+-    } | whiptail --title "Progress" --gauge "Please wait while installing Apache2" 6 60 0
+-fi
++# Install apache2 
++install_if_not apache2
+ 
+ # Enable Apache2 module's
+ a2enmod proxy
+diff --git a/apps/spreedme.sh b/apps/spreedme.sh
+index bb15575..6baa516 100644
+--- a/apps/spreedme.sh
++++ b/apps/spreedme.sh
+@@ -28,11 +28,7 @@ then
+ fi
+ 
+ # Check if apache is installed
+-if ! [ "$(dpkg-query -W -f='${Status}' apache2 2>/dev/null | grep -c "ok installed")" -eq 1 ]
+-then
+-    echo "Apache is not installed, the script will exit."
+-    exit 1
+-fi
++install_if_not apache2
+ 
+ # Install Nextcloud Spreedme Snap
+ if [ -d "$SNAPDIR" ]
+diff --git a/lets-encrypt/activate-ssl.sh b/lets-encrypt/activate-ssl.sh
+index c0ca385..988df74 100644
+--- a/lets-encrypt/activate-ssl.sh
++++ b/lets-encrypt/activate-ssl.sh
+@@ -95,12 +95,7 @@ done
+ 
+ # Check if 443 is open using nmap, if not notify the user
+ apt update -q4 & spinner_loading
+-if [ "$(dpkg-query -W -f='${Status}' nmap 2>/dev/null | grep -c "ok installed")" == "1" ]
+-then
+-    echo "nmap is already installed..."
+-else
+-    apt install nmap -y
+-fi
++install_if_not nmap
+ 
+ if [ "$(nmap -sS -p 443 "$WANIP4" -PN | grep -c "open")" == "1" ]
+ then
+@@ -233,8 +228,8 @@ standalone() {
+ a2dissite 000-default.conf
+ sudo service apache2 stop
+ # Generate certs
+-eval "letsencrypt certonly --standalone $default_le"
+-if [ "$?" -eq 0 ]; then
++if eval "letsencrypt certonly --standalone $default_le"
++then
+     echo "success" > /tmp/le_test
+ else
+     echo "fail" > /tmp/le_test
+@@ -245,16 +240,16 @@ a2ensite 000-default.conf
+ service apache2 reload
+ }
+ webroot() {
+-eval "letsencrypt certonly --webroot --webroot-path $NCPATH $default_le"
+-if [ "$?" -eq 0 ]; then
++if eval "letsencrypt certonly --webroot --webroot-path $NCPATH $default_le"
++then
+     echo "success" > /tmp/le_test
+ else
+     echo "fail" > /tmp/le_test
+ fi
+ }
+ certonly() {
+-eval "letsencrypt certonly $default_le"
+-if [ "$?" -eq 0 ]; then
++if eval "letsencrypt certonly $default_le"
++then
+     echo "success" > /tmp/le_test
+ else
+     echo "fail" > /tmp/le_test
+diff --git a/lib.sh b/lib.sh
+index 83e4790..b0fe744 100644
+--- a/lib.sh
++++ b/lib.sh
+@@ -44,11 +44,18 @@ UNIXUSER_PROFILE="/home/$UNIXUSER/.bash_profile"
+ ROOT_PROFILE="/root/.bash_profile"
+ # MARIADB
+ SHUF=$(shuf -i 25-29 -n 1)
++<<<<<<< HEAD
+ MARIADB_PASS=$(tr -dc "a-zA-Z0-9@#*=" < /dev/urandom | fold -w "$SHUF" | head -n 1)
+ NEWMARIADBPASS=$(tr -dc "a-zA-Z0-9@#*=" < /dev/urandom | fold -w "$SHUF" | head -n 1)
+ [ ! -z "$NCDB" ] && NCCONFIGDB=$(grep "dbname" $NCPATH/config/config.php | awk '{print $3}' | sed "s/[',]//g")
+ MYCNF=/root/.my.cnf
+ [ ! -z "$MYCNFPW" ] && MARIADBMYCNFPASS=$(grep "password" $MYCNF | sed -n "/password/s/^password='\(.*\)'$/\1/p")
++=======
++PGDB_PASS=$(tr -dc "a-zA-Z0-9@#*=" < /dev/urandom | fold -w "$SHUF" | head -n 1)
++NEWPGPASS=$(tr -dc "a-zA-Z0-9@#*=" < /dev/urandom | fold -w "$SHUF" | head -n 1)
++[ ! -z "$NCDB" ] && NCCONFIGDB=$(grep "dbname" $NCPATH/config/config.php | awk '{print $3}' | sed "s/[',]//g")
++[ ! -z "$NCDBPASS" ] && NCCONFIGDBPASS=$(grep "dbpassword" $NCPATH/config/config.php | awk '{print $3}' | sed "s/[',]//g")
++>>>>>>> 59adc5c... install_if_not (#296)
+ # Path to specific files
+ PHPMYADMIN_CONF="/etc/apache2/conf-available/phpmyadmin.conf"
+ SECURE="$SCRIPTS/setup_secure_permissions_nextcloud.sh"
+@@ -184,6 +191,14 @@ then
+ fi
+ }
+ 
++# Install_if_not program
++install_if_not () {
++if [[ "$(is_this_installed "${1}")" != "${1} is installed, it must be a clean server." ]]
++then
++    apt update -q4 & spinner_loading && apt install "${1}" -y
++fi
++}
++
+ # Test RAM size 
+ # Call it like this: ram_check [amount of min RAM in GB] [for which program]
+ # Example: ram_check 2 Nextcloud
+@@ -217,8 +232,8 @@ fi
+ }
+ 
+ check_command() {
+-  eval "$*"
+-  if [ ! $? -eq 0 ]; then
++  if eval "$*"
++  then
+      printf "${IRed}Sorry but something went wrong. Please report this issue to $ISSUES and include the output of the error message. Thank you!${Color_Off}\n"
+      echo "$* failed"
+     exit 1
+@@ -252,6 +267,7 @@ calc_wt_size() {
+ }
+ 
+ download_verify_nextcloud_stable() {
++rm -f "$HTML/$STABLEVERSION.tar.bz2"
+ wget -q -T 10 -t 2 "$NCREPO/$STABLEVERSION.tar.bz2" -P "$HTML"
+ mkdir -p "$GPGDIR"
+ wget -q "$NCREPO/$STABLEVERSION.tar.bz2.asc" -P "$GPGDIR"
+diff --git a/nextcloud_update.sh b/nextcloud_update.sh
+index 8d59f07..4f2fabe 100644
+--- a/nextcloud_update.sh
++++ b/nextcloud_update.sh
+@@ -34,11 +34,7 @@ export DEBIAN_FRONTEND=noninteractive ; apt dist-upgrade -y -o Dpkg::Options::="
+ # Update Redis PHP extention
+ if type pecl > /dev/null 2>&1
+ then
+-    if [ "$(dpkg-query -W -f='${Status}' php7.0-dev 2>/dev/null | grep -c "ok installed")" == "0" ]
+-    then
+-        echo "Preparing to upgrade Redis Pecl extenstion..."
+-        apt install php7.0-dev -y
+-    fi
++    install_if_not php7.0-dev
+     echo "Trying to upgrade the Redis Pecl extenstion..."
+     pecl upgrade redis
+     service apache2 restart
+@@ -76,20 +72,6 @@ then
+     chmod +x "$SECURE"
+ fi
+ 
+-# Upgrade Nextcloud
+-echo "Checking latest released version on the Nextcloud download server and if it's possible to download..."
+-wget -q -T 10 -t 2 "$NCREPO/$STABLEVERSION.tar.bz2" -O /dev/null & spinner_loading
+-if [ $? -eq 0 ]; then
+-    printf "${Green}SUCCESS!${Color_Off}\n"
+-    rm -f "$STABLEVERSION.tar.bz2"
+-else
+-    echo
+-    printf "${IRed}Nextcloud %s doesn't exist.${Color_Off}\n" "$NCVERSION"
+-    echo "Please check available versions here: $NCREPO"
+-    echo
+-    exit 1
+-fi
+-
+ # Major versions unsupported
+ if [ "${CURRENTVERSION%%.*}" == "$NCBAD" ]
+ then
+@@ -120,6 +102,7 @@ else
+     exit 0
+ fi
+ 
++<<<<<<< HEAD
+ # Make sure old instaces can upgrade as well
+ if [ ! -f "$MYCNF" ] && [ -f /var/mysql_password.txt ]
+ then
+@@ -150,6 +133,19 @@ then
+     exit 1
+ else
+     rm -f /var/mysql_password.txt
++=======
++# Upgrade Nextcloud
++echo "Checking latest released version on the Nextcloud download server and if it's possible to download..."
++if ! wget -q --show-progress -T 10 -t 2 "$NCREPO/$STABLEVERSION.tar.bz2"
++then
++    echo
++    printf "${IRed}Nextcloud %s doesn't exist.${Color_Off}\n" "$NCVERSION"
++    echo "Please check available versions here: $NCREPO"
++    echo
++    exit 1
++else
++    rm -f "$STABLEVERSION.tar.bz2"
++>>>>>>> 59adc5c... install_if_not (#296)
+ fi
+ 
+ echo "Backing up files and upgrading to Nextcloud $NCVERSION in 10 seconds..."
+@@ -170,8 +166,7 @@ fi
+ # Backup data
+ for folders in config themes apps
+ do
+-    rsync -Aax "$NCPATH/$folders" "$BACKUP"
+-    if [ $? -eq 0 ]
++    if [[ "$(rsync -Aax $NCPATH/$folders $BACKUP)" -eq 0 ]]
+     then
+         BACKUP_OK=1
+     else
+--
+Working Copy 3.2.9
+
